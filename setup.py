@@ -36,6 +36,7 @@ setup(
         'cloudify_aws',
         'cloudify_aws.ec2',
         'cloudify_aws.vpc'
+        's3',
     ],
 
     license='LICENSE',
