@@ -18,7 +18,7 @@ import os
 import ConfigParser
 
 # Third-party Imports
-from boto import connect_s3
+import boto3
 
 # Cloudify Imports
 from ec2 import utils
@@ -40,12 +40,14 @@ class S3ConnectionClient():
         aws_config = (self._get_aws_config_property() or
                       self._get_aws_config_from_file())
         if aws_config:
-            return connect_s3(
+            aws_session = boto3.Session(
                 aws_config['aws_access_key_id'],
                 aws_config['aws_secret_access_key'],
+                region_name=aws_config.get('region', 'us-east-1'),
             )
         else:
-            return connect_s3()
+            aws_session = boto3.Session()
+        return aws_session.client('s3')
 
     def _get_aws_config_property(self):
         node_properties = \

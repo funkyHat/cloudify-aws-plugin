@@ -261,16 +261,28 @@ node_types:
         type: string
         default: ''
         required: true
-      public:
+      permissions:
+        description: |
+          What permissions to set on the bucket.
+          Valid options are: private, public-read, public-read-write, authenticated-read
+        type: string
+        default: private
+      website_index_page:
         description: >
-          Whether the bucket should be public or not.
-        type: boolean
-        default: false
-      website_default_page:
-        description: >
-          If set, this will make the bucket into a web page,
-          with the default page for any path being this value.
+          If both this and website_error_page are set, this bucket will become a web page.
+          If one is set, the other must be set.
+          This value defines the index page to use in any paths in the site, e.g. for index.html a visit to
+          http://<bucket address>/ will return http://<bucket address>/index.html
+          and
+          http://<bucket address>/other/ will return http://<bucket address>/other/index.html
           May not contain a /.
+        type: string
+        default: ''
+      website_error_page:
+        description: >
+          If both this and website_index_page are set, this bucket will become a web page.
+          If one is set, the other must be set.
+          This defines the object to return in the event of a HTTP 4XX error.
         type: string
         default: ''
       use_existing_resource:

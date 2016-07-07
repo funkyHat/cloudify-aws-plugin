@@ -27,8 +27,9 @@ node_templates:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
       name: { get_input: bucket_name }
-      website_default_page: index.html
-      public: true
+      website_index_page: index.html
+      website_error_page: error.html
+      permissions: public-read
 
   string_object:
     type: cloudify.aws.nodes.S3Object
@@ -38,6 +39,20 @@ node_templates:
         aws_secret_access_key: { get_input: aws_secret_access_key }
       name: index.html
       contents: '<html><head><title>Hello bukkit</title></head><body><h1>Welcome to the POC bucket</h1><img src="images/flickr-phoebesphotos-bucket" />Image from phoebesphotos on flickr, used under CC</body></html>'
+      load_contents_from_file: false
+      content_type: 'text/html'
+    relationships:
+      - target: bucket
+        type: cloudify.aws.relationships.s3_object_contained_in_bucket
+
+  error_object:
+    type: cloudify.aws.nodes.S3Object
+    properties:
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+      name: error.html
+      contents: '<html><head><title>Bukkit not found?</title></head><body><h1>HTTP 4-oh-no!</h1><p>Ah lost mah bukkit</p></body></html>'
       load_contents_from_file: false
       content_type: 'text/html'
     relationships:
