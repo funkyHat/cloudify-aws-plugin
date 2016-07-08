@@ -22,5 +22,21 @@ node_templates:
       name: 'hello'
       memory: 4
       image: 'hello'
-      volumes_from:
-        - readOnly: why not
+
+  vol1:
+    type: cloudify.aws.nodes.ECSVolume
+    properties:
+      name: 'vol1'
+
+  task1:
+    type: cloudify.aws.nodes.ECSTask
+    properties:
+      name: 'test'
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+    relationships:
+      - type: cloudify.aws.relationships.ecs_container_for_task
+        target: con1
+      - type: cloudify.aws.relationships.ecs_volume_for_task
+        target: vol1

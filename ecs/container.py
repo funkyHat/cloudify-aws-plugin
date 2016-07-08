@@ -202,6 +202,8 @@ def validate(ctx):
             )
 
     # Check we have a relationship with a task
+    # TODO: We could really do with validating this in some way
+    return
     rel = 'cloudify.aws.relationships.ecs_container_for_task'
     node_type = 'cloudify.aws.nodes.ECSTask'
     valid_relationships = 0

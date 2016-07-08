@@ -5,101 +5,95 @@ from cloudify.exceptions import NonRecoverableError
 from ecs import connection
 
 
-# TODO: Make this not be bucketty
+def get_appropriate_relationship_targets(
+    relationships,
+    target_relationship,
+    target_node,
+):
+    results = []
+    for relationship in relationships:
+        if relationship.type == target_relationship:
+            if relationship.target.node.type == target_node:
+                results.append(relationship.target.node)
+            else:
+                raise NonRecoverableError(
+                    '{rel} may only be made against nodes of type {correct}, '
+                    'but was made against node type {actual}'.format(
+                        rel=target_relationships,
+                        correct=target_node,
+                        actual=relationship.target.node.type,
+                    )
+                )
+    return results
+
+
+def construct_volume_definitions(ctx):
+    volumes = get_appropriate_relationship_targets(
+        relationships=ctx.instance.relationships,
+        target_relationship='cloudify.aws.relationships.ecs_volume_for_task',
+        target_node='cloudify.aws.nodes.ECSVolume',
+    )
+
+    return [
+        {'name': volume.properties['name']}
+        for volume in volumes
+    ]
+
+
+def construct_container_definitions(ctx):
+    containers = get_appropriate_relationship_targets(
+        relationships=ctx.instance.relationships,
+        target_relationship=(
+            'cloudify.aws.relationships.ecs_container_for_task'
+        ),
+        target_node='cloudify.aws.nodes.ECSContainer',
+    )
+
+    container_definitions = []
+
+    for container in containers:
+        definition = {
+            'name': container.properties['name'],
+            'image': container.properties['image'],
+            'memory': container.properties['memory'],
+        }
+        container_definitions.append(definition)
+
+    return container_definitions
+
 @operation
 def create(ctx):
-    ctx.instance.runtime_properties['created'] = False
+    ctx.instance.runtime_properties['arn'] = None
 
-    s3_client = connection.S3ConnectionClient().client()
-    bucket_name = ctx.node.properties['name']
+    containers = construct_container_definitions(ctx)
+    volumes = construct_volume_definitions(ctx)
 
-    existing_buckets = s3_client.list_buckets()['Buckets']
-    existing_buckets = [bucket['Name'] for bucket in existing_buckets]
-    if ctx.node.properties['use_existing_resource']:
-        if bucket_name in existing_buckets:
-            return True
-        else:
-            raise NonRecoverableError(
-                'Attempt to use existing bucket {bucket} failed, as no '
-                'bucket by that name exists.'.format(bucket=bucket_name)
-            )
-    else:
-        if bucket_name in existing_buckets:
-            raise NonRecoverableError(
-                'Bucket {bucket} already exists, but use_existing_resource '
-                'is not set to true.'.format(bucket=bucket_name)
-            )
+    task_definition = {
+        'family': ctx.node.properties['name'],
+        'containerDefinitions': containers,
+        'volumes': volumes,
+    }
 
-    try:
-        s3_client.create_bucket(
-            Bucket=bucket_name,
-            ACL=ctx.node.properties['permissions'],
-        )
-        ctx.instance.runtime_properties['created'] = True
-    except ClientError as err:
-        raise NonRecoverableError(
-            'Bucket creation failed: {}'.format(err.msg)
-        )
-
-    # See if we should configure this as a website
-    index = ctx.node.properties['website_index_page']
-    error = ctx.node.properties['website_error_page']
-    if (index, error) == ('', ''):
-        # Neither the index nor the error page were defined, this bucket is
-        # not intended to be a website
-        pass
-    elif '' in (index, error):
-        raise NonRecoverableError(
-            'For the bucket to be configured as a website, both '
-            'website_index_page and website_error_page must be set.'
-        )
-    else:
-        if '/' in index:
-            raise NonRecoverableError(
-                'S3 bucket website default page must not contain a /'
-            )
-        s3_client.put_bucket_website(
-            Bucket=bucket_name,
-            WebsiteConfiguration={
-                'ErrorDocument': {
-                    'Key': error,
-                },
-                'IndexDocument': {
-                    'Suffix': index,
-                },
-            },
-        )
-
-    bucket_region = s3_client.head_bucket(
-        Bucket=bucket_name,
-    )['ResponseMetadata']['HTTPHeaders']['x-amz-bucket-region']
-
-    ctx.instance.runtime_properties['url'] = (
-        'http://{bucket}.s3-website-{region}.amazonaws.com'.format(
-            bucket=bucket_name,
-            region=bucket_region,
-        )
-    )
+    ctx.logger.warn(task_definition)
 
 
 @operation
 def delete(ctx):
-    if ctx.node.properties['use_existing_resource']:
-        return True
+    task = ctx.node.properties['name']
 
-    bucket_name = ctx.node.properties['name']
-
-    if not ctx.instance.runtime_properties.get('created', False):
+    if ctx.instance.runtime_properties.get('arn', None) is None:
         raise NonRecoverableError(
-            'Bucket {bucket} creation failed, so it will not be '
-            'deleted.'.format(bucket=bucket_name)
+            'Task {task} was not created by this deployment so will not be '
+            'deleted.'.format(task=task)
         )
 
-    s3_client = connection.S3ConnectionClient().client()
+    ecs_client = connection.ECSConnectionClient().client()
 
     try:
-        s3_client.delete_bucket(Bucket=bucket_name)
+        ecs_client.deregister_task_definition(
+            taskDefinition=ctx.instance.runtime_properties['arn'],
+        )
     except ClientError as err:
         raise NonRecoverableError(
-            'Bucket deletion failed: {}'.format(err.message)
+            'Task deletion failed: {}'.format(err.message)
         )

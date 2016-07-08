@@ -353,6 +353,11 @@ node_types:
           If this is false and the cluster does exist, an error will be raised.
         type: boolean
         default: false
+      aws_config:
+        description: >
+          A dictionary of values to pass to authenticate with the AWS API.
+        type: cloudify.datatypes.aws.Config
+        required: false
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.cluster.create
@@ -369,6 +374,11 @@ node_types:
         description: >
           The number of instantiations of the associated task to run on the cluster.
         default: 1
+      aws_config:
+        description: >
+          A dictionary of values to pass to authenticate with the AWS API.
+        type: cloudify.datatypes.aws.Config
+        required: false
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.service.create
@@ -380,6 +390,11 @@ node_types:
       name:
         description: >
           The name of the task on ECS. Known as a 'family' within ECS.
+      aws_config:
+        description: >
+          A dictionary of values to pass to authenticate with the AWS API.
+        type: cloudify.datatypes.aws.Config
+        required: false
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.task.create
@@ -534,6 +549,10 @@ node_types:
           Dictionary of key-value pairs to set docker labels with associated values,
           as in the --label option to docker run.
         default: {}
+      install_agent:
+        description: >
+          Don't install an agent into an ECS container.
+        default: false
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.container.validate
@@ -1201,7 +1220,7 @@ relationships:
     derived_from: cloudify.relationships.contained_in
 
   cloudify.aws.relationships.ecs_volume_for_task:
-    derived_from: cloudify.relationships.contained_in
+    derived_from: cloudify.relationships.depends_on
 
   cloudify.aws.relationships.ecs_container_for_task:
-    derived_from: cloudify.relationships.contained_in
+    derived_from: cloudify.relationships.depends_on
