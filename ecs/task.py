@@ -74,7 +74,12 @@ def create(ctx):
         'volumes': volumes,
     }
 
-    ctx.logger.warn(task_definition)
+    ecs_client = connection.ECSConnectionClient().client()
+    result = ecs_client.register_task_definition(**task_definition)
+
+    ctx.instance.runtime_properties['arn'] = (
+        result['taskDefinition']['taskDefinitionArn']
+    )
 
 
 @operation
