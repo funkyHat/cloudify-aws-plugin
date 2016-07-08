@@ -345,7 +345,7 @@ node_types:
         description: >
           Name of ECS cluster.
         type: string
-      use_existing_resource: >
+      use_existing_resource:
         description: >
           Whether to use an existing cluster. If this is true, no cluster will be created and
           if the cluster does not exist an error will be raised.
@@ -353,7 +353,7 @@ node_types:
           If this is false and the cluster does exist, an error will be raised.
         type: boolean
         default: false
-   interfaces:
+    interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.cluster.create
         delete: aws.ecs.cluster.delete
@@ -529,8 +529,9 @@ node_types:
         default: []
       docker_labels:
         description: >
-          List of key-value pairs to set docker labels with associated values,
+          Dictionary of key-value pairs to set docker labels with associated values,
           as in the --label option to docker run.
+        default: {}
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.container.validate

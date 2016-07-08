@@ -1,0 +1,34 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+description: >
+  Do things with S3, cause happiness.
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
+  - plugin.yaml
+
+inputs:
+  aws_access_key_id:
+    description: >
+      The access key ID used to access the AWS API
+  aws_secret_access_key:
+    description: >
+      The secret key used to access the AWS API
+
+node_templates:
+  con1:
+    type: cloudify.aws.nodes.ECSContainer
+    properties:
+      name: 'hello'
+      memory: 82
+      image: 'hello'
+    relationships:
+      - target: con2
+        type: cloudify.aws.relationships.ecs_volume_for_task
+
+  con2:
+    type: cloudify.aws.nodes.ECSContainer
+    properties:
+      name: 'hello'
+      memory: 82
+      image: 'hello'
