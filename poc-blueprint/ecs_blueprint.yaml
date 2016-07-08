@@ -20,15 +20,7 @@ node_templates:
     type: cloudify.aws.nodes.ECSContainer
     properties:
       name: 'hello'
-      memory: 82
+      memory: 4
       image: 'hello'
-    relationships:
-      - target: con2
-        type: cloudify.aws.relationships.ecs_volume_for_task
-
-  con2:
-    type: cloudify.aws.nodes.ECSContainer
-    properties:
-      name: 'hello'
-      memory: 82
-      image: 'hello'
+      volumes_from:
+        - readOnly: why not

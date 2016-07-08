@@ -397,18 +397,20 @@ node_types:
           as in the IMAGE parameter of docker run.
       memory:
         description: >
-          The amount of RAM to reserve for this container. Note that exceeding this will cause the container to be killed.
+          The amount of RAM in MB to reserve for this container.
+          Note that exceeding this will cause the container to be killed.
+          This must be at least 4 (MB)
       # The remaining parameters for containers are optional
       tcp_port_mappings:
         description: >
-          A dictionary of <container_port>: <host port> mappings to map TCP ports to the container.
-          Ports 22, 2375, 2376, 51678 are restricted.
+          A dictionary of <host port>: <container port> mappings to map TCP ports to the container.
+          Ports 22, 2375, 2376, 51678 are restricted and may not be used as host ports.
           At most 100 TCP and UDP port mappings may be provided.
         default: {}
       udp_port_mappings:
         description: >
-          A dictionary of <container_port>: <host port> mappings to map UDP ports to the container.
-          Ports 22, 2375, 2376, 51678 are restricted.
+          A dictionary of <host port>: <container port> mappings to map UDP ports to the container.
+          Ports 22, 2375, 2376, 51678 are restricted and may not be used as host ports.
           At most 100 TCP and UDP port mappings may be provided.
         default: {}
       cpu_units:
