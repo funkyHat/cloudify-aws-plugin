@@ -5,101 +5,74 @@ from cloudify.exceptions import NonRecoverableError
 from ecs import connection
 
 
-# TODO: Make this not be bucketty
+def get_arn(relationships, arn_from_relationship):
+    arn = None
+
+    for relationship in relationships:
+        if relationship.type == arn_from_relationship:
+            arn = relationship.target.instance.runtime_properties['arn']
+            break
+
+    return arn
+
+
 @operation
 def create(ctx):
-    ctx.instance.runtime_properties['created'] = False
+    ecs_client = connection.ECSConnectionClient().client()
 
-    s3_client = connection.S3ConnectionClient().client()
-    bucket_name = ctx.node.properties['name']
-
-    existing_buckets = s3_client.list_buckets()['Buckets']
-    existing_buckets = [bucket['Name'] for bucket in existing_buckets]
-    if ctx.node.properties['use_existing_resource']:
-        if bucket_name in existing_buckets:
-            return True
-        else:
-            raise NonRecoverableError(
-                'Attempt to use existing bucket {bucket} failed, as no '
-                'bucket by that name exists.'.format(bucket=bucket_name)
-            )
-    else:
-        if bucket_name in existing_buckets:
-            raise NonRecoverableError(
-                'Bucket {bucket} already exists, but use_existing_resource '
-                'is not set to true.'.format(bucket=bucket_name)
-            )
-
-    try:
-        s3_client.create_bucket(
-            Bucket=bucket_name,
-            ACL=ctx.node.properties['permissions'],
-        )
-        ctx.instance.runtime_properties['created'] = True
-    except ClientError as err:
-        raise NonRecoverableError(
-            'Bucket creation failed: {}'.format(err.msg)
-        )
-
-    # See if we should configure this as a website
-    index = ctx.node.properties['website_index_page']
-    error = ctx.node.properties['website_error_page']
-    if (index, error) == ('', ''):
-        # Neither the index nor the error page were defined, this bucket is
-        # not intended to be a website
-        pass
-    elif '' in (index, error):
-        raise NonRecoverableError(
-            'For the bucket to be configured as a website, both '
-            'website_index_page and website_error_page must be set.'
-        )
-    else:
-        if '/' in index:
-            raise NonRecoverableError(
-                'S3 bucket website default page must not contain a /'
-            )
-        s3_client.put_bucket_website(
-            Bucket=bucket_name,
-            WebsiteConfiguration={
-                'ErrorDocument': {
-                    'Key': error,
-                },
-                'IndexDocument': {
-                    'Suffix': index,
-                },
-            },
-        )
-
-    bucket_region = s3_client.head_bucket(
-        Bucket=bucket_name,
-    )['ResponseMetadata']['HTTPHeaders']['x-amz-bucket-region']
-
-    ctx.instance.runtime_properties['url'] = (
-        'http://{bucket}.s3-website-{region}.amazonaws.com'.format(
-            bucket=bucket_name,
-            region=bucket_region,
-        )
+    cluster_arn = get_arn(
+        ctx.instance.relationships,
+        'cloudify.aws.relationships.ecs_service_running_on_cluster',
     )
+    task_arn = get_arn(
+        ctx.instance.relationships,
+        'cloudify.aws.relationships.ecs_service_runs_task',
+    )
+
+    if None in (cluster_arn, task_arn):
+        raise NonRecoverableError(
+            'Could not create Service {service}. ECS Services must have '
+            'relationships to both a cluster '
+            '(cloudify.aws.relationships.ecs_service_running_on_cluster) '
+            'and a task '
+            '(cloudify.aws.relationships.ecs_service_runs_task). '
+            'Related cluster was {cluster}. '
+            'Related task was {task}.'.format(
+                service=ctx.node.properties['name'],
+                cluster=cluster_arn,
+                task=task_arn,
+            )
+        )
+
+    response = ecs_client.create_service(
+        cluster=cluster_arn,
+        serviceName=ctx.node.properties['name'],
+        desiredCount=ctx.node.properties['desired_count'],
+        taskDefinition=task_arn,
+        clientToken=ctx.instance.id,
+    )
+    ctx.instance.runtime_properties['arn'] = response['service']['serviceArn']
 
 
 @operation
 def delete(ctx):
-    if ctx.node.properties['use_existing_resource']:
-        return True
+    cluster_arn = get_arn(
+        ctx.instance.relationships,
+        'cloudify.aws.relationships.ecs_service_running_on_cluster',
+    )
+    arn = ctx.instance.runtime_properties.get('arn', None)
 
-    bucket_name = ctx.node.properties['name']
-
-    if not ctx.instance.runtime_properties.get('created', False):
+    if arn is None:
         raise NonRecoverableError(
-            'Bucket {bucket} creation failed, so it will not be '
-            'deleted.'.format(bucket=bucket_name)
+            'Service {service} creation failed, so it will not be '
+            'deleted.'.format(service=ctx.node.properties['name'])
         )
 
-    s3_client = connection.S3ConnectionClient().client()
+    ecs_client = connection.ECSConnectionClient().client()
 
     try:
-        s3_client.delete_bucket(Bucket=bucket_name)
+        ecs_client.delete_service(service=arn, cluster=cluster_arn)
     except ClientError as err:
         raise NonRecoverableError(
-            'Bucket deletion failed: {}'.format(err.message)
+            'Service deletion failed: {}'.format(err.message)
         )

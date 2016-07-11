@@ -8,6 +8,11 @@ imports:
   - plugin.yaml
 
 inputs:
+  docker_image_name:
+    description: >
+      Name of image which will be retrieved from docker hub.
+    default: hello-world
+
   aws_access_key_id:
     description: >
       The access key ID used to access the AWS API
@@ -16,12 +21,35 @@ inputs:
       The secret key used to access the AWS API
 
 node_templates:
+
+  cluster1:
+    type: cloudify.aws.nodes.ECSCluster
+    properties:
+      name: sw-test
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+
+  service1:
+    type: cloudify.aws.nodes.ECSService
+    properties:
+      name: sw-test
+      desired_count: 1
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+    relationships:
+      - type: cloudify.aws.relationships.ecs_service_running_on_cluster
+        target: cluster1
+      - type: cloudify.aws.relationships.ecs_service_runs_task
+        target: task1
+
   con1:
     type: cloudify.aws.nodes.ECSContainer
     properties:
       name: 'hello'
       memory: 4
-      image: 'hello'
+      image: { get_input: docker_image_name }
 
   vol1:
     type: cloudify.aws.nodes.ECSVolume

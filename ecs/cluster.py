@@ -5,7 +5,6 @@ from cloudify.exceptions import NonRecoverableError
 from ecs import connection
 
 
-# TODO: Make this not be bucketty
 @operation
 def create(ctx):
     ecs_client = connection.ECSConnectionClient().client()
@@ -58,7 +57,7 @@ def delete(ctx):
     ecs_client = connection.ECSConnectionClient().client()
 
     try:
-        ecs_client.delete_bucket(cluster=arn)
+        ecs_client.delete_cluster(cluster=arn)
     except ClientError as err:
         raise NonRecoverableError(
             'Cluster deletion failed: {}'.format(err.message)

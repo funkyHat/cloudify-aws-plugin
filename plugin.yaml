@@ -358,6 +358,10 @@ node_types:
           A dictionary of values to pass to authenticate with the AWS API.
         type: cloudify.datatypes.aws.Config
         required: false
+      install_agent:
+        description: >
+          Don't install an agent into an ECS cluster.
+        default: false
     interfaces:
       cloudify.interfaces.lifecycle:
         create: aws.ecs.cluster.create
@@ -1217,7 +1221,7 @@ relationships:
     derived_from: cloudify.relationships.contained_in
 
   cloudify.aws.relationships.ecs_service_runs_task:
-    derived_from: cloudify.relationships.contained_in
+    derived_from: cloudify.relationships.depends_on
 
   cloudify.aws.relationships.ecs_volume_for_task:
     derived_from: cloudify.relationships.depends_on
