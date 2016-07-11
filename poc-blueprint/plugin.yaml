@@ -438,7 +438,7 @@ node_types:
         description: >
           If this is true, all other containers associated with this task will be stopped if this container fails or stops for any reason.
         type: boolean
-        default: false
+        default: true
       entrypoint:
         description: >
           Entrypoint for container, in the form ["command", "arg1", "arg2", ...],

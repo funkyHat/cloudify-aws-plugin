@@ -8,78 +8,38 @@ from ecs import connection
 # TODO: Make this not be bucketty
 @operation
 def create(ctx):
-    ctx.instance.runtime_properties['created'] = False
+    ecs_client = connection.ECSConnectionClient().client()
+    cluster_name = ctx.node.properties['name']
 
-    s3_client = connection.S3ConnectionClient().client()
-    bucket_name = ctx.node.properties['name']
+    cluster_exists = False
+    cluster_arns = ecs_client.list_clusters()['clusterArns']
+    cluster_details = ecs_client.describe_clusters(clusters=cluster_arns)
+    clusters = []
+    for cluster in cluster_details['clusters']:
+        clusters.append('clusterArn')
+        clusters.append('clusterName')
+    if cluster_name in clusters:
+        cluster_exists = True
 
-    existing_buckets = s3_client.list_buckets()['Buckets']
-    existing_buckets = [bucket['Name'] for bucket in existing_buckets]
     if ctx.node.properties['use_existing_resource']:
-        if bucket_name in existing_buckets:
+        if cluster_exists:
             return True
         else:
             raise NonRecoverableError(
-                'Attempt to use existing bucket {bucket} failed, as no '
-                'bucket by that name exists.'.format(bucket=bucket_name)
+                'Attempt to use existing cluster {cluster} failed, as no '
+                'cluster by that name exists.'.format(cluster=cluster_name)
             )
     else:
-        if bucket_name in existing_buckets:
+        if cluster_exists:
             raise NonRecoverableError(
-                'Bucket {bucket} already exists, but use_existing_resource '
-                'is not set to true.'.format(bucket=bucket_name)
+                'Cluster {cluster} already exists, but use_existing_resource '
+                'is not set to true.'.format(cluster=cluster_name)
             )
 
-    try:
-        s3_client.create_bucket(
-            Bucket=bucket_name,
-            ACL=ctx.node.properties['permissions'],
-        )
-        ctx.instance.runtime_properties['created'] = True
-    except ClientError as err:
-        raise NonRecoverableError(
-            'Bucket creation failed: {}'.format(err.msg)
-        )
-
-    # See if we should configure this as a website
-    index = ctx.node.properties['website_index_page']
-    error = ctx.node.properties['website_error_page']
-    if (index, error) == ('', ''):
-        # Neither the index nor the error page were defined, this bucket is
-        # not intended to be a website
-        pass
-    elif '' in (index, error):
-        raise NonRecoverableError(
-            'For the bucket to be configured as a website, both '
-            'website_index_page and website_error_page must be set.'
-        )
-    else:
-        if '/' in index:
-            raise NonRecoverableError(
-                'S3 bucket website default page must not contain a /'
-            )
-        s3_client.put_bucket_website(
-            Bucket=bucket_name,
-            WebsiteConfiguration={
-                'ErrorDocument': {
-                    'Key': error,
-                },
-                'IndexDocument': {
-                    'Suffix': index,
-                },
-            },
-        )
-
-    bucket_region = s3_client.head_bucket(
-        Bucket=bucket_name,
-    )['ResponseMetadata']['HTTPHeaders']['x-amz-bucket-region']
-
-    ctx.instance.runtime_properties['url'] = (
-        'http://{bucket}.s3-website-{region}.amazonaws.com'.format(
-            bucket=bucket_name,
-            region=bucket_region,
-        )
+    response = ecs_client.create_cluster(
+        clusterName=ctx.node.properties['name'],
     )
+    ctx.instance.runtime_properties['arn'] = response['cluster']['clusterArn']
 
 
 @operation
@@ -87,19 +47,19 @@ def delete(ctx):
     if ctx.node.properties['use_existing_resource']:
         return True
 
-    bucket_name = ctx.node.properties['name']
+    arn = ctx.instance.runtime_properties.get('arn', None)
 
-    if not ctx.instance.runtime_properties.get('created', False):
+    if arn is None:
         raise NonRecoverableError(
-            'Bucket {bucket} creation failed, so it will not be '
-            'deleted.'.format(bucket=bucket_name)
+            'Cluster {cluster} creation failed, so it will not be '
+            'deleted.'.format(cluster=ctx.node.properties['name'])
         )
 
-    s3_client = connection.S3ConnectionClient().client()
+    ecs_client = connection.ECSConnectionClient().client()
 
     try:
-        s3_client.delete_bucket(Bucket=bucket_name)
+        ecs_client.delete_bucket(cluster=arn)
     except ClientError as err:
         raise NonRecoverableError(
-            'Bucket deletion failed: {}'.format(err.message)
+            'Cluster deletion failed: {}'.format(err.message)
         )
