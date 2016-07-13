@@ -164,7 +164,7 @@ class ELBConnectionClient(EC2ConnectionClient):
         if 'region' in aws_config:
             if type(aws_config['region']) is RegionInfo:
                 return ELBConnection(**aws_config)
-            elif type(aws_config['region']) is str:
+            else:
                 elb_region = aws_config.pop('region')
                 return connect_to_elb_region(
                     elb_region, **aws_config)
