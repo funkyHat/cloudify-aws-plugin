@@ -11,7 +11,7 @@ inputs:
   docker_image_name:
     description: >
       Name of image which will be retrieved from docker hub.
-    default: hello-world
+    default: training/webapp:latest
 
   aws_access_key_id:
     description: >
@@ -32,6 +32,18 @@ inputs:
     default: m3.medium
 
 node_templates:
+
+  elb:
+    type: cloudify.aws.nodes.ElasticLoadBalancer
+    properties:
+      elb_name: sw-test
+      zones: ['us-east-1a']
+      listeners:
+          - [80, 5000, 'http']
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+        region: us-east-1
 
   cluster1:
     type: cloudify.aws.nodes.ECSCluster
@@ -64,6 +76,8 @@ node_templates:
     properties:
       name: sw-test
       desired_count: 1
+      container_listening_port: 5000
+      lb_management_role: ecsService
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }

@@ -5,18 +5,43 @@ from cloudify.exceptions import NonRecoverableError
 from ecs import connection
 
 
-def get_target_attribute(relationships, from_relationship, desired_attribute):
-    arn = None
+def get_relationship_target(relationships, intended_relationship):
+    target = None
 
     for relationship in relationships:
-        if relationship.type == from_relationship:
-            arn = relationship.target.instance.runtime_properties.get(
-                desired_attribute,
-                None
-            )
+        if relationship.type == intended_relationship:
+            target = relationship.target
             break
 
-    return arn
+    return target
+
+
+def get_target_attribute(relationships, from_relationship, desired_attribute):
+    target = get_relationship_target(relationships, from_relationship)
+
+    attr = None
+
+    if target is not None:
+        attr = target.instance.runtime_properties.get(
+            desired_attribute,
+            None
+        )
+
+    return attr
+
+
+def get_target_property(relationships, from_relationship, desired_property):
+    target = get_relationship_target(relationships, from_relationship)
+
+    prop = None
+
+    if target is not None:
+        prop = target.node.properties.get(
+            desired_property,
+            None
+        )
+
+    return prop
 
 
 def get_arn(relationships, from_relationship):
@@ -27,6 +52,16 @@ def get_arn(relationships, from_relationship):
     )
 
 
+def get_related_elb_name(relationships):
+    return get_target_property(
+        relationships=relationships,
+        from_relationship=(
+            'cloudify.aws.relationships.ecs_service_behind_load_balancer'
+        ),
+        desired_property='elb_name',
+    )
+
+
 def get_container_instance_count(relationships):
     return get_target_attribute(
         relationships=relationships,
@@ -34,6 +69,16 @@ def get_container_instance_count(relationships):
             'cloudify.aws.relationships.ecs_service_running_on_cluster'
         ),
         desired_attribute='instances',
+    )
+
+
+def get_task_container_names(relationships):
+    return get_target_attribute(
+        relationships=relationships,
+        from_relationship=(
+            'cloudify.aws.relationships.ecs_service_runs_task'
+        ),
+        desired_attribute='container_names',
     )
 
 
@@ -75,13 +120,36 @@ def create(ctx):
             )
         )
 
-    response = ecs_client.create_service(
-        cluster=cluster_arn,
-        serviceName=ctx.node.properties['name'],
-        desiredCount=ctx.node.properties['desired_count'],
-        taskDefinition=task_arn,
-        #clientToken=ctx.instance.id,
-    )
+    service_definition = {
+        'cluster': cluster_arn,
+        'serviceName': ctx.node.properties['name'],
+        'desiredCount': ctx.node.properties['desired_count'],
+        'taskDefinition': task_arn,
+    }
+
+    related_elb = get_related_elb_name(ctx.instance.relationships)
+
+    if related_elb is not None:
+        containers = get_task_container_names(ctx.istance.relationships)
+
+        if len(containers) != 1:
+            raise NonRecoverableError(
+                'Could not associate load balancer. '
+                'Associating a load balancer requires a task with exactly '
+                'one container.'
+            )
+
+        load_balancer = {
+            'loadBalancerName': related_elb,
+            'containerName': containers[0],
+            'containerPort': ctx.node.properties['container_listening_port'],
+        }
+
+        service_definition['loadBalancers'] = [load_balancer]
+
+        service_definition['role'] = ctx.properties['lb_management_role']
+
+    response = ecs_client.create_service(**service_definition)
     ctx.instance.runtime_properties['arn'] = response['service']['serviceArn']
 
 

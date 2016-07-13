@@ -177,6 +177,11 @@ def create(ctx):
     ctx.instance.runtime_properties['arn'] = None
 
     containers = construct_container_definitions(ctx)
+
+    ctx.instance.runtime_properties['container_names'] = [
+        container['name'] for container in containers
+    ]
+
     volumes = construct_volume_definitions(ctx)
 
     task_definition = {
