@@ -20,6 +20,17 @@ inputs:
     description: >
       The secret key used to access the AWS API
 
+  image:
+    description: >
+      Image to be used when launching agent VM's.
+      Recommended images for ECS: http://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_container_instance.html
+    default: ami-a88a46c5
+
+  size:
+    description: >
+      Flavor of the agent VM's
+    default: m3.medium
+
 node_templates:
 
   cluster1:
@@ -29,6 +40,24 @@ node_templates:
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
+
+  clusterinstances:
+    type: cloudify.aws.nodes.Instance
+    instances:
+      deploy: 2
+    properties:
+      image_id: { get_input: image }
+      instance_type: { get_input: size }
+      install_agent: false
+      parameters:
+        user_data: "#!/bin/bash \n echo ECS_CLUSTER=sw-test >> /etc/ecs/ecs.config"
+        instance_profile_name: ecsInstanceRole
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
+    relationships:
+      - type: cloudify.aws.relationships.ecs_instances_in_cluster
+        target: cluster1
 
   service1:
     type: cloudify.aws.nodes.ECSService
@@ -43,6 +72,12 @@ node_templates:
         target: cluster1
       - type: cloudify.aws.relationships.ecs_service_runs_task
         target: task1
+      # If this isn't there then a much longer retry period is needed because
+      # the service gets created while the cluster instances are being created
+      # and has to wait too long for them to be both deployed and registered
+      # with the cluster.
+      - type: cloudify.relationships.depends_on
+        target: clusterinstances
 
   con1:
     type: cloudify.aws.nodes.ECSContainer

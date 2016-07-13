@@ -5,20 +5,51 @@ from cloudify.exceptions import NonRecoverableError
 from ecs import connection
 
 
-def get_arn(relationships, arn_from_relationship):
+def get_target_attribute(relationships, from_relationship, desired_attribute):
     arn = None
 
     for relationship in relationships:
-        if relationship.type == arn_from_relationship:
-            arn = relationship.target.instance.runtime_properties['arn']
+        if relationship.type == from_relationship:
+            arn = relationship.target.instance.runtime_properties.get(
+                desired_attribute,
+                None
+            )
             break
 
     return arn
 
 
+def get_arn(relationships, from_relationship):
+    return get_target_attribute(
+        relationships=relationships,
+        from_relationship=from_relationship,
+        desired_attribute='arn',
+    )
+
+
+def get_container_instance_count(relationships):
+    return get_target_attribute(
+        relationships=relationships,
+        from_relationship=(
+            'cloudify.aws.relationships.ecs_service_running_on_cluster'
+        ),
+        desired_attribute='instances',
+    )
+
+
 @operation
 def create(ctx):
     ecs_client = connection.ECSConnectionClient().client()
+
+    # Don't try to do anything until the cluster has instances...
+    # Worth noting that this will
+    container_instances = get_container_instance_count(
+        ctx.instance.relationships,
+    )
+    if len(container_instances) == 0 or container_instances is None:
+        return ctx.operation.retry(
+            'Waiting for cluster to have available instances.',
+        )
 
     cluster_arn = get_arn(
         ctx.instance.relationships,
@@ -49,7 +80,7 @@ def create(ctx):
         serviceName=ctx.node.properties['name'],
         desiredCount=ctx.node.properties['desired_count'],
         taskDefinition=task_arn,
-        clientToken=ctx.instance.id,
+        #clientToken=ctx.instance.id,
     )
     ctx.instance.runtime_properties['arn'] = response['service']['serviceArn']
 
@@ -71,6 +102,8 @@ def delete(ctx):
     ecs_client = connection.ECSConnectionClient().client()
 
     try:
+        ecs_client.update_service(service=arn, cluster=cluster_arn,
+                                  desiredCount=0)
         ecs_client.delete_service(service=arn, cluster=cluster_arn)
     except ClientError as err:
         raise NonRecoverableError(

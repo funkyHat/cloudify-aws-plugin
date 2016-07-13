@@ -1228,3 +1228,10 @@ relationships:
 
   cloudify.aws.relationships.ecs_container_for_task:
     derived_from: cloudify.relationships.depends_on
+
+  cloudify.aws.relationships.ecs_instances_in_cluster:
+    derived_from: cloudify.relationships.contained_in
+    target_interfaces:
+      cloudify.interfaces.relationship_lifecycle:
+        establish: aws.ecs.cluster.add_container_instance
+        unlink: aws.ecs.cluster.remove_container_instance
