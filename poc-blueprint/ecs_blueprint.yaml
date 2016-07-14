@@ -63,6 +63,7 @@ node_templates:
       install_agent: false
       parameters:
         user_data: "#!/bin/bash \n echo ECS_CLUSTER=sw-test >> /etc/ecs/ecs.config"
+        # Needs role as described in http://docs.aws.amazon.com/AmazonECS/latest/developerguide/instance_IAM_role.html
         instance_profile_name: ecsInstanceRole
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
@@ -89,7 +90,7 @@ node_templates:
       # If this isn't there then a much longer retry period is needed because
       # the service gets created while the cluster instances are being created
       # and has to wait too long for them to be both deployed and registered
-      # with the cluster.
+      # with the cluster, causing deployment failure.
       - type: cloudify.relationships.depends_on
         target: clusterinstances
 
@@ -117,3 +118,8 @@ node_templates:
         target: con1
       - type: cloudify.aws.relationships.ecs_volume_for_task
         target: vol1
+
+outputs:
+  endpoint:
+    description: The DNS name of your load balancer..
+    value: { get_attribute: [ elb, dns_name ] }

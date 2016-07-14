@@ -59,6 +59,8 @@ def create_elb(**_):
 
     lb = _create_elb()
 
+    ctx.instance.runtime_properties['dns_name'] = lb.dns_name
+
     health_checks = ctx.node.properties.get('health_checks')
 
     if health_checks:
