@@ -69,16 +69,16 @@ def construct_container_definitions(ctx):
         udp_mappings = props['udp_port_mappings']
         port_mappings = [
             {
-                'containerPort': container_port,
-                'hostPort': host_port,
+                'containerPort': int(container_port),
+                'hostPort': int(host_port),
                 'protocol': 'tcp',
             }
             for host_port, container_port in tcp_mappings.items()
         ]
         port_mappings.extend([
             {
-                'containerPort': container_port,
-                'hostPort': host_port,
+                'containerPort': int(container_port),
+                'hostPort': int(host_port),
                 'protocol': 'udp',
             }
             for host_port, container_port in udp_mappings.items()

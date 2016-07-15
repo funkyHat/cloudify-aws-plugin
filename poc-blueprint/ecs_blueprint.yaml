@@ -11,7 +11,7 @@ inputs:
   docker_image_name:
     description: >
       Name of image which will be retrieved from docker hub.
-    default: training/webapp:latest
+    default: ubuntu
 
   aws_access_key_id:
     description: >
@@ -31,15 +31,26 @@ inputs:
       Flavor of the agent VM's
     default: m3.medium
 
+  name_prefix:
+    description: >
+      What to prefix the names of entities with.
+    default: ecs-poc
+
 node_templates:
 
   elb:
     type: cloudify.aws.nodes.ElasticLoadBalancer
     properties:
-      elb_name: sw-test
-      zones: ['us-east-1a']
+      elb_name: { concat: [ {get_input: name_prefix }, -elb ] }
+      zones: ['us-east-1c']
       listeners:
-          - [80, 5000, 'http']
+        - [80, 80, 'http']
+      health_checks:
+        - target: TCP:80
+          timeout: 60
+          unhealthy_threshold: 10
+          healthy_threshold: 2
+          interval: 120
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
@@ -48,7 +59,7 @@ node_templates:
   cluster1:
     type: cloudify.aws.nodes.ECSCluster
     properties:
-      name: sw-test
+      name: { concat: [ {get_input: name_prefix }, -cluster ] }
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
@@ -62,23 +73,44 @@ node_templates:
       instance_type: { get_input: size }
       install_agent: false
       parameters:
-        user_data: "#!/bin/bash \n echo ECS_CLUSTER=sw-test >> /etc/ecs/ecs.config"
+        user_data: { concat: [ "#!/bin/bash \n echo ECS_CLUSTER=", {get_input: name_prefix }, "-cluster >> /etc/ecs/ecs.config" ] }
         # Needs role as described in http://docs.aws.amazon.com/AmazonECS/latest/developerguide/instance_IAM_role.html
         instance_profile_name: ecsInstanceRole
+        # Needs to be in a region served by the LB
+        placement: 'us-east-1c'
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
     relationships:
       - type: cloudify.aws.relationships.ecs_instances_in_cluster
         target: cluster1
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: sg
+
+  sg:
+    type: cloudify.aws.nodes.SecurityGroup
+    properties:
+      description: { concat: [ {get_input: name_prefix }, -ecs ] }
+      rules:
+        - cidr_ip: 0.0.0.0/0
+          ip_protocol: tcp
+          from_port: 80
+          to_port: 80
+        - cidr_ip: 51.9.249.184/32
+          ip_protocol: tcp
+          from_port: 22
+          to_port: 22
+      aws_config:
+        aws_access_key_id: { get_input: aws_access_key_id }
+        aws_secret_access_key: { get_input: aws_secret_access_key }
 
   service1:
     type: cloudify.aws.nodes.ECSService
     properties:
-      name: sw-test
+      name: { concat: [ {get_input: name_prefix }, -service ] }
       desired_count: 1
-      container_listening_port: 5000
-      lb_management_role: ecsService
+      container_listening_port: 80
+      lb_management_role: ecsServiceRole
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }
@@ -87,6 +119,8 @@ node_templates:
         target: cluster1
       - type: cloudify.aws.relationships.ecs_service_runs_task
         target: task1
+      - type: cloudify.aws.relationships.ecs_service_behind_load_balancer
+        target: elb
       # If this isn't there then a much longer retry period is needed because
       # the service gets created while the cluster instances are being created
       # and has to wait too long for them to be both deployed and registered
@@ -97,9 +131,14 @@ node_templates:
   con1:
     type: cloudify.aws.nodes.ECSContainer
     properties:
-      name: 'hello'
-      memory: 4
+      name: 'webapp'
+      memory: 256
+      command:
+        - bash
+        - -c
+        - 'apt-get update && apt-get install -y nginx && /usr/sbin/nginx && sleep 86400'
       image: { get_input: docker_image_name }
+      tcp_port_mappings: {80: 80}
 
   vol1:
     type: cloudify.aws.nodes.ECSVolume
@@ -109,7 +148,7 @@ node_templates:
   task1:
     type: cloudify.aws.nodes.ECSTask
     properties:
-      name: 'test'
+      name: { concat: [ {get_input: name_prefix }, -task ] }
       aws_config:
         aws_access_key_id: { get_input: aws_access_key_id }
         aws_secret_access_key: { get_input: aws_secret_access_key }

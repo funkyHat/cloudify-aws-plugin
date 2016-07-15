@@ -130,7 +130,7 @@ def create(ctx):
     related_elb = get_related_elb_name(ctx.instance.relationships)
 
     if related_elb is not None:
-        containers = get_task_container_names(ctx.istance.relationships)
+        containers = get_task_container_names(ctx.instance.relationships)
 
         if len(containers) != 1:
             raise NonRecoverableError(
@@ -147,7 +147,7 @@ def create(ctx):
 
         service_definition['loadBalancers'] = [load_balancer]
 
-        service_definition['role'] = ctx.properties['lb_management_role']
+        service_definition['role'] = ctx.node.properties['lb_management_role']
 
     response = ecs_client.create_service(**service_definition)
     ctx.instance.runtime_properties['arn'] = response['service']['serviceArn']
